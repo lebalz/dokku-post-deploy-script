@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -eo pipefail; [[ $DOKKU_TRACE ]] && set -x
+source "$PLUGIN_CORE_AVAILABLE_PATH/common/functions"
+
+post_deploy_script_report_cmd() {
+  #shellcheck disable=SC2034
+  declare desc="Report post deploy script setup for app"
+  local cmd="post-deploy-script:report"
+  # Support --app/$DOKKU_APP_NAME flag
+  # Use the following lines to reorder args into "$cmd $DOKKU_APP_NAME $@""
+  local argv=("$@")
+  [[ ${argv[0]} == "$cmd" ]] && shift 1
+  [[ ! -z $DOKKU_APP_NAME ]] && set -- $DOKKU_APP_NAME $@
+  set -- $cmd $@
+  ##
+
+  APP="$2"
+  [[ -z "$APP" ]] && dokku_log_fail "Please specify an app to run the command on"
+  verify_app_name "$APP"
+
+  if [[ -f "$DOKKU_ROOT/$APP/POST_DEPLOY_SCRIPTS_DISABLED" ]]; then
+    dokku_log_info1 "enabled: ✕"
+  else
+    dokku_log_info1 "enabled: ✓"
+  fi
+
+  if [[ ! -d "$DOKKU_ROOT/$APP/post-deploy-scripts" || ! -f "$DOKKU_ROOT/$APP/post-deploy-scripts/POST_DEPLOY_SCRIPT" ]]; then
+        dokku_log_warn "No post deploy script was set for app $APP"
+  else
+        dokku_log_info1 "POST_DEPLOY_SCRIPT"
+        dokku_log_info1 "DOKKU_POST_DEPLOY_SCRIPT_DEPENDENCIES"
+        local DEPENDENCIES=$(dokku config:get "$APP" DOKKU_POST_DEPLOY_SCRIPT_DEPENDENCIES)
+        local FILES=$(echo $DEPENDENCIES | tr ";" "\n")
+        for file in $FILES
+        do
+            if [[ -f "$DOKKU_ROOT/$APP/post-deploy-scripts/$file" ]]; then
+                dokku_log_info1 "- $file ✓"
+            else
+                dokku_log_info1 "- $file ✕ (specified but not found inside deployed container)"
+            fi
+        done
+  fi
+}
+
+post_deploy_script_report_cmd "$@"

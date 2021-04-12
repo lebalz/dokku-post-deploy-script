@@ -4,18 +4,51 @@ source "$PLUGIN_CORE_AVAILABLE_PATH/common/functions"
 
 post-deploy-script() {
     local APP="$1"; verify_app_name "$APP"
-    local SCRIPT_PATH="$DOKKU_ROOT/$APP/POST_DEPLOY_SCRIPT"
 
-    dokku_log_info1 "Checking for post deploy script..."
-
-    # No script found abort
-    if [[ ! -f "$SCRIPT_PATH" ]]; then
-        dokku_log_info1 "No post deploy script found."
+    if [[ -f "$DOKKU_ROOT/$APP/POST_DEPLOY_SCRIPTS_DISABLED" ]]; then
+        dokku_log_info1 "execution of post deploy script disabled. (run 'dokku post-deploy-script:enable $APP' to re-enable it.)"
         return 0
     fi
 
+    local SCRIPT_PATH="$DOKKU_ROOT/$APP/post-deploy-scripts/"
+    local POST_DEPLOY_SCRIPT="$DOKKU_ROOT/$APP/post-deploy-scripts/POST_DEPLOY_SCRIPT"
+    dokku_log_info1 "Checking for post deploy script..."
+
+    dokku_log_info1 "Cleanup existing post deploy scripts in $SCRIPT_PATH..."
+    rm -rf $SCRIPT_PATH;
+    mkdir -p $SCRIPT_PATH
+
+    local IMAGE_TAG="$(get_running_image_tag "$APP")"
+    local IMAGE=$(get_deploying_app_image_name "$APP" "$IMAGE_TAG")
+
+    copy_from_image "$IMAGE" "POST_DEPLOY_SCRIPT" "$POST_DEPLOY_SCRIPT" 2>/dev/null
+
+    if [[ ! -s "${POST_DEPLOY_SCRIPT}" ]]; then
+        dokku_log_info1 "No post deploy script named 'POST_DEPLOY_SCRIPT' found in project root."
+        return 0
+    else
+        dokku_log_info1 "Post deploy script found."
+    fi
+
+    # copy additional files
+    local DEPENDENCIES=$(dokku config:get "$APP" DOKKU_POST_DEPLOY_SCRIPT_DEPENDENCIES)
+    if [[ -z "$DEPENDENCIES" ]]; then
+        dokku_log_info1 "No dependencies to copy."
+    else
+        local FILES=$(echo $DEPENDENCIES | tr ";" "\n")
+
+        for file in $FILES
+        do
+            mkdir -p "$(dirname "$SCRIPT_PATH/$file")"
+            copy_from_image "$IMAGE" "$file" "$SCRIPT_PATH/$file" 2>/dev/null
+            if [[ ! -s "$SCRIPT_PATH/$file" ]]; then
+                dokku_log_info1 "Could not copy file '$file'."
+            fi
+        done
+    fi
+
     dokku_log_info1 "Executing post deploy script..."
-    local OUTPUT=$(source "$SCRIPT_PATH")
+    local OUTPUT=$(cd $SCRIPT_PATH && source "$POST_DEPLOY_SCRIPT")
     dokku_log_verbose_quiet "$OUTPUT"
 }
 

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -eo pipefail; [[ $DOKKU_TRACE ]] && set -x
+source "$PLUGIN_CORE_AVAILABLE_PATH/common/functions"
+
+post_deploy_script_disable_cmd() {
+  #shellcheck disable=SC2034
+  declare desc="Disable the post deploy script for app"
+  local cmd="post-deploy-script:disable"
+  # Support --app/$DOKKU_APP_NAME flag
+  # Use the following lines to reorder args into "$cmd $DOKKU_APP_NAME $@""
+  local argv=("$@")
+  [[ ${argv[0]} == "$cmd" ]] && shift 1
+  [[ ! -z $DOKKU_APP_NAME ]] && set -- $DOKKU_APP_NAME $@
+  set -- $cmd $@
+  ##
+
+  APP="$2"
+  [[ -z "$APP" ]] && dokku_log_fail "Please specify an app to run the command on"
+  verify_app_name "$APP"
+  touch "$DOKKU_ROOT/$APP/POST_DEPLOY_SCRIPTS_DISABLED"
+}
+
+post_deploy_script_disable_cmd "$@"
