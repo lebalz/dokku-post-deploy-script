@@ -14,12 +14,19 @@ post-deploy-script() {
     local POST_DEPLOY_SCRIPT="$DOKKU_ROOT/$APP/post-deploy-scripts/POST_DEPLOY_SCRIPT"
     dokku_log_info1 "Checking for post deploy script..."
 
-    dokku_log_info1 "Cleanup existing post deploy scripts in $SCRIPT_PATH..."
     rm -rf $SCRIPT_PATH;
     mkdir -p $SCRIPT_PATH
 
-    local IMAGE_TAG="$(get_running_image_tag "$APP")"
-    local IMAGE=$(get_deploying_app_image_name "$APP" "$IMAGE_TAG")
+    local IMAGE_TAG="$(get_running_image_tag "$APP" 2>/dev/null)"
+    if [[ -z "$IMAGE_TAG" ]]; then
+        dokku_log_warn "Could not get image tag of '$APP' - not possible to look for a post deploy script. Skipping."
+        return 0
+    fi
+    local IMAGE=$(get_deploying_app_image_name "$APP" "$IMAGE_TAG" 2>/dev/null)
+    if [[ -z "$IMAGE" ]]; then
+        dokku_log_warn "Could not get image of '$APP:$IMAGE_TAG' - not possible to look for a post deploy script. Skipping."
+        return 0
+    fi
 
     copy_from_image "$IMAGE" "POST_DEPLOY_SCRIPT" "$POST_DEPLOY_SCRIPT" 2>/dev/null
 
